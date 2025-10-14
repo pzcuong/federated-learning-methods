@@ -32,8 +32,8 @@ ENV/
 *.swo
 *~
 
-# Data
-data/
+# Data (downloaded datasets only, not source code)
+/data/
 *.npz
 *.npy
 *.pkl
