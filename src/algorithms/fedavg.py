@@ -54,7 +54,7 @@ class FedAvg:
             local_model = copy.deepcopy(self.global_model)
             
             # Train on client data
-            local_model = train_local_model(
+            local_model, _ = train_local_model(
                 local_model,
                 self.client_loaders[client_id],
                 self.local_epochs,

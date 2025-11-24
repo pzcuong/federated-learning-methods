@@ -20,6 +20,47 @@ def load_mnist(data_dir='./data'):
     return train_dataset, test_dataset
 
 
+def load_cifar10(data_dir='./data'):
+    """Load CIFAR10 dataset."""
+    # Data augmentation for training
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    ])
+    
+    # Simple normalization for test
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    ])
+    
+    train_dataset = datasets.CIFAR10(data_dir, train=True, download=True, transform=transform_train)
+    test_dataset = datasets.CIFAR10(data_dir, train=False, download=True, transform=transform_test)
+    
+    return train_dataset, test_dataset
+
+
+def load_dataset(dataset_name='mnist', data_dir='./data'):
+    """
+    Load dataset by name.
+    
+    Args:
+        dataset_name: Name of dataset ('mnist' or 'cifar10')
+        data_dir: Directory to store/load data
+        
+    Returns:
+        train_dataset, test_dataset
+    """
+    if dataset_name.lower() == 'mnist':
+        return load_mnist(data_dir)
+    elif dataset_name.lower() == 'cifar10':
+        return load_cifar10(data_dir)
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}. Choose 'mnist' or 'cifar10'.")
+
+
 def create_federated_data(dataset, num_clients, iid=True):
     """
     Split dataset into federated clients.

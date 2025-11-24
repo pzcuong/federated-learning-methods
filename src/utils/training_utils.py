@@ -25,6 +25,9 @@ def train_local_model(model, data_loader, epochs, learning_rate, device, mu=0.0,
     model.train()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
     
+    total_loss = 0.0
+    num_batches = 0
+    
     for epoch in range(epochs):
         for batch_idx, (data, target) in enumerate(data_loader):
             data, target = data.to(device), target.to(device)
@@ -41,8 +44,12 @@ def train_local_model(model, data_loader, epochs, learning_rate, device, mu=0.0,
             
             loss.backward()
             optimizer.step()
+            
+            total_loss += loss.item()
+            num_batches += 1
     
-    return model
+    avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+    return model, avg_loss
 
 
 def evaluate_model(model, test_loader, device):

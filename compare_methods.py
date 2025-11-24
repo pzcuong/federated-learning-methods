@@ -1,17 +1,23 @@
 """
-Main script to compare federated learning methods on MNIST dataset.
+Comprehensive comparison of federated learning methods on MNIST and CIFAR10.
 """
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-from src.models.mnist_net import MNISTNet
-from src.data.data_loader import load_mnist, create_federated_data, get_data_loaders
+from src.models.unified_cnn import UnifiedCNN
+from src.data.data_loader import load_dataset, create_federated_data, get_data_loaders
 from src.algorithms.fedavg import FedAvg
 from src.algorithms.fedprox import FedProx
+from src.algorithms.fed_nolowe import FedNoLowe
+from src.algorithms.fed_lws import FedLWS
+from src.algorithms.fed_awa import FedAWA
 
 
-def plot_comparison(results, save_path='results_comparison.png'):
+def plot_comparison(results, dataset_name, save_path=None):
     """Plot comparison of different methods."""
+    if save_path is None:
+        save_path = f'{dataset_name}_comparison.png'
+    
     plt.figure(figsize=(14, 5))
     
     # Plot accuracy
@@ -20,7 +26,7 @@ def plot_comparison(results, save_path='results_comparison.png'):
         plt.plot(history['accuracy'], label=method_name, marker='o', markersize=4)
     plt.xlabel('Communication Round')
     plt.ylabel('Test Accuracy (%)')
-    plt.title('Test Accuracy Comparison')
+    plt.title(f'Test Accuracy Comparison ({dataset_name.upper()})')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
@@ -30,7 +36,7 @@ def plot_comparison(results, save_path='results_comparison.png'):
         plt.plot(history['loss'], label=method_name, marker='s', markersize=4)
     plt.xlabel('Communication Round')
     plt.ylabel('Test Loss')
-    plt.title('Test Loss Comparison')
+    plt.title(f'Test Loss Comparison ({dataset_name.upper()})')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
@@ -40,20 +46,32 @@ def plot_comparison(results, save_path='results_comparison.png'):
     plt.close()
 
 
-def main():
-    # Configuration
-    num_clients = 10
-    num_rounds = 20
-    local_epochs = 5
-    learning_rate = 0.01
-    batch_size = 32
-    client_fraction = 1.0  # Fraction of clients to use per round
-    iid = True  # IID or non-IID data distribution
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def run_experiment(dataset_name, num_clients=10, num_rounds=20, local_epochs=5, 
+                   learning_rate=0.01, batch_size=32, client_fraction=1.0, iid=True):
+    """
+    Run federated learning experiment on a specified dataset.
     
-    print("=" * 60)
-    print("Federated Learning Methods Comparison on MNIST")
-    print("=" * 60)
+    Args:
+        dataset_name: 'mnist' or 'cifar10'
+        num_clients: Number of federated clients
+        num_rounds: Number of communication rounds
+        local_epochs: Local training epochs per round
+        learning_rate: Learning rate
+        batch_size: Batch size
+        client_fraction: Fraction of clients to use per round
+        iid: IID or non-IID data distribution
+    """
+    # Use MPS (Metal) on Mac, CUDA on NVIDIA GPUs, or CPU as fallback
+    if torch.backends.mps.is_available():
+        device = torch.device('mps')
+    elif torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+    
+    print("\n" + "=" * 70)
+    print(f"Federated Learning Comparison on {dataset_name.upper()}")
+    print("=" * 70)
     print(f"Number of clients: {num_clients}")
     print(f"Communication rounds: {num_rounds}")
     print(f"Local epochs: {local_epochs}")
@@ -62,11 +80,11 @@ def main():
     print(f"Client fraction: {client_fraction}")
     print(f"Data distribution: {'IID' if iid else 'Non-IID'}")
     print(f"Device: {device}")
-    print("=" * 60)
+    print("=" * 70)
     
     # Load and prepare data
-    print("\nLoading MNIST dataset...")
-    train_dataset, test_dataset = load_mnist()
+    print(f"\nLoading {dataset_name.upper()} dataset...")
+    train_dataset, test_dataset = load_dataset(dataset_name)
     
     print(f"Creating federated data for {num_clients} clients...")
     client_datasets = create_federated_data(train_dataset, num_clients, iid=iid)
@@ -79,73 +97,140 @@ def main():
     # Dictionary to store results
     results = {}
     
-    # Train FedAvg
-    print("\n" + "=" * 60)
+    # 1. FedAvg
+    print("\n" + "=" * 70)
     print("Training with FedAvg")
-    print("=" * 60)
-    model_fedavg = MNISTNet()
+    print("=" * 70)
+    model = UnifiedCNN(dataset=dataset_name)
     fedavg = FedAvg(
-        model_fedavg,
-        client_loaders,
-        test_loader,
-        device,
-        local_epochs=local_epochs,
-        learning_rate=learning_rate
+        model, client_loaders, test_loader, device,
+        local_epochs=local_epochs, learning_rate=learning_rate
     )
     results['FedAvg'] = fedavg.train(num_rounds, client_fraction)
     
-    # Train FedProx
-    print("\n" + "=" * 60)
+    # 2. FedProx
+    print("\n" + "=" * 70)
     print("Training with FedProx (mu=0.01)")
-    print("=" * 60)
-    model_fedprox = MNISTNet()
+    print("=" * 70)
+    model = UnifiedCNN(dataset=dataset_name)
     fedprox = FedProx(
-        model_fedprox,
-        client_loaders,
-        test_loader,
-        device,
-        local_epochs=local_epochs,
-        learning_rate=learning_rate,
-        mu=0.01
+        model, client_loaders, test_loader, device,
+        local_epochs=local_epochs, learning_rate=learning_rate, mu=0.01
     )
-    results['FedProx (mu=0.01)'] = fedprox.train(num_rounds, client_fraction)
+    results['FedProx'] = fedprox.train(num_rounds, client_fraction)
     
-    # Train FedProx with different mu
-    print("\n" + "=" * 60)
-    print("Training with FedProx (mu=0.1)")
-    print("=" * 60)
-    model_fedprox2 = MNISTNet()
-    fedprox2 = FedProx(
-        model_fedprox2,
-        client_loaders,
-        test_loader,
-        device,
-        local_epochs=local_epochs,
-        learning_rate=learning_rate,
-        mu=0.1
+    # 3. FedNoLowe
+    print("\n" + "=" * 70)
+    print("Training with FedNoLowe")
+    print("=" * 70)
+    model = UnifiedCNN(dataset=dataset_name)
+    fed_nolowe = FedNoLowe(
+        model, client_loaders, test_loader, device,
+        local_epochs=local_epochs, learning_rate=learning_rate
     )
-    results['FedProx (mu=0.1)'] = fedprox2.train(num_rounds, client_fraction)
+    results['FedNoLowe'] = fed_nolowe.train(num_rounds, client_fraction)
+    
+    # 4. FedLWS
+    print("\n" + "=" * 70)
+    print("Training with FedLWS")
+    print("=" * 70)
+    model = UnifiedCNN(dataset=dataset_name)
+    fed_lws = FedLWS(
+        model, client_loaders, test_loader, device,
+        local_epochs=local_epochs, learning_rate=learning_rate
+    )
+    results['FedLWS'] = fed_lws.train(num_rounds, client_fraction)
+    
+    # 5. FedAWA
+    print("\n" + "=" * 70)
+    print("Training with FedAWA")
+    print("=" * 70)
+    model = UnifiedCNN(dataset=dataset_name)
+    fed_awa = FedAWA(
+        model, client_loaders, test_loader, device,
+        local_epochs=local_epochs, learning_rate=learning_rate
+    )
+    results['FedAWA'] = fed_awa.train(num_rounds, client_fraction)
     
     # Print final results
-    print("\n" + "=" * 60)
-    print("Final Results")
-    print("=" * 60)
+    print("\n" + "=" * 70)
+    print(f"Final Results for {dataset_name.upper()}")
+    print("=" * 70)
+    print(f"{'Method':<20} {'Final Acc':<12} {'Max Acc':<12} {'Final Loss':<12}")
+    print("-" * 70)
     for method_name, history in results.items():
         final_acc = history['accuracy'][-1]
         final_loss = history['loss'][-1]
         max_acc = max(history['accuracy'])
-        print(f"{method_name:25} - Final: {final_acc:.2f}%, Max: {max_acc:.2f}%, Loss: {final_loss:.4f}")
+        print(f"{method_name:<20} {final_acc:>10.2f}%  {max_acc:>10.2f}%  {final_loss:>10.4f}")
     
     # Plot comparison
-    print("\nGenerating comparison plots...")
-    plot_comparison(results)
+    print(f"\nGenerating comparison plots for {dataset_name.upper()}...")
+    plot_comparison(results, dataset_name)
     
-    print("\nExperiment completed successfully!")
+    return results
 
 
-if __name__ == '__main__':
+def main():
     # Set random seed for reproducibility
     torch.manual_seed(42)
     np.random.seed(42)
     
+    # Configuration
+    num_clients = 10
+    num_rounds = 20
+    local_epochs = 5
+    learning_rate = 0.01
+    batch_size = 32
+    client_fraction = 1.0
+    iid = True
+    
+    # Run experiments on both datasets
+    all_results = {}
+    
+    # MNIST
+    print("\n" + "=" * 70)
+    print("STARTING MNIST EXPERIMENTS")
+    print("=" * 70)
+    all_results['mnist'] = run_experiment(
+        dataset_name='mnist',
+        num_clients=num_clients,
+        num_rounds=num_rounds,
+        local_epochs=local_epochs,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        client_fraction=client_fraction,
+        iid=iid
+    )
+    
+    # CIFAR10
+    print("\n" + "=" * 70)
+    print("STARTING CIFAR10 EXPERIMENTS")
+    print("=" * 70)
+    all_results['cifar10'] = run_experiment(
+        dataset_name='cifar10',
+        num_clients=num_clients,
+        num_rounds=num_rounds,
+        local_epochs=local_epochs,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        client_fraction=client_fraction,
+        iid=iid
+    )
+    
+    # Final summary
+    print("\n" + "=" * 70)
+    print("EXPERIMENT SUMMARY")
+    print("=" * 70)
+    
+    for dataset_name, results in all_results.items():
+        print(f"\n{dataset_name.upper()} - Best accuracy per method:")
+        for method_name, history in results.items():
+            max_acc = max(history['accuracy'])
+            print(f"  {method_name:<20}: {max_acc:.2f}%")
+    
+    print("\nAll experiments completed successfully!")
+
+
+if __name__ == '__main__':
     main()
