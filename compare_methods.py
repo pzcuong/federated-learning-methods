@@ -11,6 +11,7 @@ from src.algorithms.fedprox import FedProx
 from src.algorithms.fed_nolowe import FedNoLowe
 from src.algorithms.fed_lws import FedLWS
 from src.algorithms.fed_awa import FedAWA
+from src.algorithms.fed_cil import FedCIL
 
 
 def plot_comparison(results, dataset_name, save_path=None):
@@ -151,6 +152,17 @@ def run_experiment(dataset_name, num_clients=10, num_rounds=20, local_epochs=5,
         local_epochs=local_epochs, learning_rate=learning_rate
     )
     results['FedAWA'] = fed_awa.train(num_rounds, client_fraction)
+    
+    # 6. FedCIL
+    print("\n" + "=" * 70)
+    print("Training with FedCIL (lambda_indep=0.1)")
+    print("=" * 70)
+    model = UnifiedCNN(dataset=dataset_name)
+    fed_cil = FedCIL(
+        model, client_loaders, test_loader, device,
+        local_epochs=local_epochs, learning_rate=learning_rate, lambda_indep=0.1
+    )
+    results['FedCIL'] = fed_cil.train(num_rounds, client_fraction)
     
     # Print final results
     print("\n" + "=" * 70)
