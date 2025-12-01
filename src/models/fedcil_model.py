@@ -207,7 +207,10 @@ def compute_independence_loss(z_c, z_e):
     Uses the Frobenius norm of the cross-covariance matrix to encourage
     orthogonality between Z_c and Z_e.
     
-    L_indep = ||Z_c^T · Z_e||_F^2 / (batch_size^2)
+    L_indep = ||Z_c^T · Z_e / batch_size||_F^2
+    
+    This is equivalent to ||cov(Z_c, Z_e)||_F^2, measuring the squared
+    Frobenius norm of the cross-covariance matrix.
     
     Args:
         z_c: Causal features [batch_size, latent_dim]
@@ -259,12 +262,20 @@ def hsic_loss(z_c, z_e, sigma=1.0):
     K_c = rbf_kernel(z_c, sigma)
     K_e = rbf_kernel(z_e, sigma)
     
-    # Center the kernel matrices
-    H = torch.eye(batch_size, device=z_c.device) - 1.0 / batch_size
-    K_c_centered = torch.mm(torch.mm(H, K_c), H)
-    K_e_centered = torch.mm(torch.mm(H, K_e), H)
+    # Center kernel matrices implicitly (memory-efficient)
+    # HKH = K - 1/n * K @ 1 - 1/n * 1 @ K + 1/n^2 * 1 @ K @ 1
+    # This simplifies to: K - row_mean - col_mean + total_mean
+    K_c_row_mean = K_c.mean(dim=1, keepdim=True)
+    K_c_col_mean = K_c.mean(dim=0, keepdim=True)
+    K_c_total_mean = K_c.mean()
+    K_c_centered = K_c - K_c_row_mean - K_c_col_mean + K_c_total_mean
     
-    # HSIC = trace(K_c @ H @ K_e @ H) / (batch_size - 1)^2
+    K_e_row_mean = K_e.mean(dim=1, keepdim=True)
+    K_e_col_mean = K_e.mean(dim=0, keepdim=True)
+    K_e_total_mean = K_e.mean()
+    K_e_centered = K_e - K_e_row_mean - K_e_col_mean + K_e_total_mean
+    
+    # HSIC = trace(K_c_centered @ K_e_centered) / (batch_size - 1)^2
     hsic = torch.trace(torch.mm(K_c_centered, K_e_centered)) / ((batch_size - 1) ** 2)
     
     return hsic

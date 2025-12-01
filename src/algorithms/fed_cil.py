@@ -14,9 +14,7 @@ Reference: Based on the mathematical formulation in the problem statement
 import torch
 import torch.nn.functional as F
 import copy
-import numpy as np
 from src.models.fedcil_model import FedCILModel, compute_independence_loss
-from src.utils.training_utils import evaluate_model
 
 
 class FedCIL:
@@ -39,7 +37,8 @@ class FedCIL:
         Initialize FedCIL algorithm.
         
         Args:
-            model: The global model (FedCILModel or compatible)
+            model: Base model used to infer dataset type (will be replaced 
+                   with FedCILModel internally)
             client_loaders: List of data loaders for clients
             test_loader: DataLoader for test data
             device: Device to train on
@@ -47,6 +46,11 @@ class FedCIL:
             learning_rate: Learning rate for local training
             lambda_indep: Weight for independence loss (default: 0.1)
             latent_dim: Dimension of latent space (default: 128)
+            
+        Note:
+            Unlike other federated algorithms, FedCIL requires a specialized
+            dual-branch architecture (FedCILModel) that is created internally.
+            The passed model is only used to determine the dataset type.
         """
         # Determine dataset type from the model or first batch
         if hasattr(model, 'dataset'):
@@ -59,7 +63,7 @@ class FedCIL:
             else:
                 dataset = 'cifar10'
         
-        # Create FedCIL model
+        # Create FedCIL model (specialized dual-branch architecture)
         self.global_model = FedCILModel(dataset=dataset, latent_dim=latent_dim).to(device)
         self.client_loaders = client_loaders
         self.test_loader = test_loader
@@ -155,7 +159,7 @@ class FedCIL:
         # Weighted average of causal components
         for key in global_causal_state.keys():
             for i, client_state in enumerate(client_causal_states):
-                global_causal_state[key] += normalized_weights[i] * client_state[key].float()
+                global_causal_state[key] += normalized_weights[i] * client_state[key]
         
         # Load aggregated causal state into global model
         global_model.load_causal_state_dict(global_causal_state)
